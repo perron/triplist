@@ -190,6 +190,9 @@ missing file, or git error.
 - The default mode uses `git diff HEAD`, which skips untracked files. Run
   `git add -N <file>` or use `--staged` to include new files.
 - Binary files can match `paths` but never a line regex.
+- File names that git has to escape (ones with quotes, backslashes or control
+  characters) may not match a glob.
+- The whole diff is held in memory. That is fine for normal pull requests.
 - Globs are case-sensitive. `**` and `{a,b}` work, also nested. POSIX
   classes like `[[:digit:]]` are reported as bad globs; use `[0-9]`. Any other `#` heading in the file ends the current item.
 - Regexes are Python regexes, and they are yours. A badly written one can be
