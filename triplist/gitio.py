@@ -11,7 +11,9 @@ DIFF_ARGS = [
     "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--no-relative",
     "--src-prefix=a/", "--dst-prefix=b/", "-M", "-U0",
 ]
-TRAILER = re.compile(r"^\s*Checked:\s*([A-Za-z0-9][A-Za-z0-9._-]*)", re.M | re.I)
+TRAILER = re.compile(r"^Checked:[ \t]*([A-Za-z0-9][A-Za-z0-9._-]*)", re.M | re.I)
+SCISSORS = "# ------------------------ >8 ------------------------"
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 
 class GitError(Exception):
@@ -43,12 +45,18 @@ def rel_to_top(path: str, top: str) -> str:
 def show(ref: str, path: str, cwd: Optional[str] = None) -> Optional[str]:
     """Return the file at ref, or None if it does not exist there."""
     try:
+        git(["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd)
+    except GitError:
+        raise GitError(f"unknown ref '{ref}' (check the name, or run git fetch)")
+    try:
         return git(["show", f"{ref}:{path}"], cwd)
     except GitError:
         return None
 
 
 def acks_in_text(text: str) -> List[str]:
+    """'Checked: <id>' lines at the start of a line, above git's scissors line."""
+    text = text.split(SCISSORS, 1)[0]
     return [m.group(1) for m in TRAILER.finditer(text)]
 
 

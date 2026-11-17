@@ -44,3 +44,11 @@ def test_validate():
     assert validate("src/[z-a].ts")
     assert validate("src/{a,b")
     assert validate("a}")
+
+
+def test_nested_braces_and_classes_in_braces():
+    assert match("src/{lib/**,app}/*.ts", "src/lib/deep/deeper/f.ts")
+    assert match("src/{lib/**,app}/*.ts", "src/app/f.ts")
+    assert match("**/*.{[ch],cpp}", "x/f.c")
+    from triplist.globs import validate
+    assert "POSIX" in validate("src/[[:digit:]].ts")

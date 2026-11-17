@@ -80,7 +80,9 @@ triplist check --base origin/main    # this branch vs main
 ## The checklist format
 
 `TRIPLIST.md` is plain Markdown. Each item is a `## id` heading followed by
-`key: value` lines. Other text is ignored, so you can add notes.
+`key: value` lines. Other text is ignored, so you can add notes. The one exception: a line
+whose key is one or two letters off a real key, like `excludes:` or `path:`,
+is an error, so a typo can't quietly switch an item off.
 
 ```markdown
 ## resume-old-sessions
@@ -102,8 +104,8 @@ why: INC-12, PR #318
 
 Repeat a regex key on several lines to mean "any of these". An item fires
 when one changed file passes its path filter and, if the item has regexes,
-one added or removed line in that same file matches. Renamed files match on
-their old or new path. Each item needs at least one of `paths`, `added`,
+one added or removed line in that same file matches. Renamed files match `paths`
+on their old or new path; `exclude` looks at the new path only. Each item needs at least one of `paths`, `added`,
 `removed` or `changed`.
 
 ## Commands
@@ -129,7 +131,7 @@ Which diff, and where the checklist comes from:
 
 `--checklist-ref REF` reads the checklist from another ref in any mode, for
 example `--staged --checklist-ref origin/main`, or
-`--diff pr.diff --checklist-ref origin/main`. With `--base`, the checklist
+`--diff pr.diff --checklist-ref origin/main` (run inside the repo). With `--base`, the checklist
 comes from the tip of REF, and the diff starts at the merge base.
 
 If the change edits the checklist itself, triplist still uses the copy from
@@ -152,7 +154,7 @@ By default `check` only reports and exits 0. Add `--enforce` to exit 1 when
 a triggered item has not been acknowledged. An acknowledgement is a line the
 author writes. It makes someone stop and answer the question; it does not
 prove they did. Acknowledge an item with a
-`Checked: <id>` line in a commit message on the branch (read with
+`Checked: <id>` line at the start of a line in a commit message on the branch (read with
 `--base`), in a message file (`--message-file`), or with `--ack <id>`.
 
 As a commit-msg hook (`.git/hooks/commit-msg`, made executable):
@@ -188,8 +190,8 @@ missing file, or git error.
 - The default mode uses `git diff HEAD`, which skips untracked files. Run
   `git add -N <file>` or use `--staged` to include new files.
 - Binary files can match `paths` but never a line regex.
-- Globs are case-sensitive. `**` and `{a,b}` work; POSIX classes like
-  `[[:digit:]]` do not. Any other `#` heading in the file ends the current item.
+- Globs are case-sensitive. `**` and `{a,b}` work, also nested. POSIX
+  classes like `[[:digit:]]` are reported as bad globs; use `[0-9]`. Any other `#` heading in the file ends the current item.
 - Regexes are Python regexes, and they are yours. A badly written one can be
   slow on a huge diff; there is no timeout.
 - triplist tells you which questions to answer. It does not answer them.

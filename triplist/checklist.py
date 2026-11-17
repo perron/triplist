@@ -115,7 +115,7 @@ def parse(text: str) -> Tuple[List[Item], List[Problem]]:
             continue
         key, value = m.group(1).lower(), m.group(2).strip()
         if key not in KEYS:
-            close = difflib.get_close_matches(key, KEYS, n=1, cutoff=0.6)
+            close = difflib.get_close_matches(key, KEYS, n=1, cutoff=0.8)
             if close:
                 problems.append(Problem(n, cur.id, f"unknown key '{m.group(1)}' (did you mean '{close[0]}'?)"))
             continue  # anything else is a note

@@ -188,3 +188,39 @@ def test_more_files_line(repo, capsys):
     git(repo, "add", "-A")
     assert main(["check", "--staged"]) == 0
     assert "...and 2 more files" in capsys.readouterr().out
+
+
+def test_scissors_and_indented_lines_do_not_ack(repo, tmp_path_factory, capsys):
+    (repo / "app.py").write_text("z = os.getenv('Z')\n")
+    git(repo, "add", "app.py")
+    msg = tmp_path_factory.mktemp("m") / "MSG"
+    msg.write_text("add Z\n\n    Checked: env\n# ------------------------ >8 ------------------------\nChecked: env\n")
+    assert main(["check", "--staged", "--enforce", "--message-file", str(msg)]) == 1
+    capsys.readouterr()
+
+
+def test_unknown_ref_and_conflicting_flags(repo, capsys):
+    assert main(["check", "--checklist-ref", "origin/mian"]) == 2
+    assert "unknown ref 'origin/mian'" in capsys.readouterr().err
+    assert main(["check", "--checklist-ref", "main", "--checklist-from", "worktree"]) == 2
+
+
+def test_unborn_head_with_worktree_checklist(tmp_path, monkeypatch, capsys):
+    git(tmp_path, "init", "-q")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "TRIPLIST.md").write_text(CHECKLIST)
+    (tmp_path / "src" / "session").mkdir(parents=True)
+    (tmp_path / "src" / "session" / "s.py").write_text("a\n")
+    git(tmp_path, "add", "-A")
+    assert main(["check", "--staged", "--checklist-from", "worktree"]) == 0
+    assert "[session]" in capsys.readouterr().out
+    assert main(["check", "--checklist-from", "worktree"]) == 0
+    assert "[session]" in capsys.readouterr().out
+
+
+def test_bad_paths_and_encoding_exit_2(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    assert main(["init", "--file", "nope/TRIPLIST.md"]) == 2
+    (tmp_path / "TRIPLIST.md").write_bytes(b"## a\npaths: x\ncheck: caf\xe9?\n")
+    assert main(["lint"]) == 2
+    assert "not UTF-8" in capsys.readouterr().err

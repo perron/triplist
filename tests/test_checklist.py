@@ -60,7 +60,7 @@ check: f
 
 
 def test_notes_with_colons_are_ignored_but_typos_are_errors():
-    items, problems = parse("## a\npaths: x\ncheck: c\nNote: see the runbook\nexcludes: tests/**\n")
+    items, problems = parse("## a\npaths: x\ncheck: c\nNote: see the runbook\nChecklist: see wiki\nexcludes: tests/**\n")
     assert len(problems) == 1 and "did you mean 'exclude'" in str(problems[0])
 
 

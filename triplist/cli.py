@@ -35,6 +35,16 @@ def _n(count: int, word: str) -> str:
     return f"{count} {word}" + ("" if count == 1 else "s")
 
 
+def _read(path: str) -> str:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    except OSError as exc:
+        raise gitio.GitError(f"cannot read {path}: {exc.strerror}")
+    except UnicodeDecodeError:
+        raise gitio.GitError(f"cannot read {path}: not UTF-8 text")
+
+
 def _err(msg: str) -> None:
     print(f"triplist: {msg}", file=sys.stderr)
 
@@ -43,18 +53,21 @@ def cmd_init(a) -> int:
     if os.path.exists(a.file):
         _err(f"{a.file} already exists; not overwriting")
         return 2
-    with open(a.file, "w", encoding="utf-8") as fh:
-        fh.write(STARTER)
+    try:
+        with open(a.file, "w", encoding="utf-8") as fh:
+            fh.write(STARTER)
+    except OSError as exc:
+        _err(f"cannot write {a.file}: {exc.strerror}")
+        return 2
     print(f"wrote {a.file} with 2 example items")
     return 0
 
 
 def cmd_lint(a) -> int:
     try:
-        with open(a.file, encoding="utf-8") as fh:
-            text = fh.read()
-    except OSError as exc:
-        _err(f"cannot read {a.file}: {exc.strerror}")
+        text = _read(a.file)
+    except gitio.GitError as exc:
+        _err(str(exc))
         return 2
     items, problems = checklist.parse(text)
     for p in problems:
@@ -68,16 +81,14 @@ def _load(a):
     """Return (diff_text, checklist_text, checklist_source, notes, acks) or raise."""
     notes: List[str] = []
     acks: List[str] = list(a.ack or [])
+    if a.checklist_ref and a.checklist_from == "worktree":
+        raise gitio.GitError("--checklist-ref and --checklist-from worktree cannot be used together")
     if a.message_file:
-        try:
-            with open(a.message_file, encoding="utf-8") as fh:
-                acks += gitio.acks_in_text(fh.read())
-        except OSError as exc:
-            raise gitio.GitError(f"cannot read {a.message_file}: {exc.strerror}")
+        acks += gitio.acks_in_text(_read(a.message_file))
 
     if a.diff is not None:
         if a.diff == "-":
-            diff_text = sys.stdin.read()
+            diff_text = sys.stdin.buffer.read().decode("utf-8", "replace")
         else:
             try:
                 with open(a.diff, encoding="utf-8", errors="replace") as fh:
@@ -85,16 +96,13 @@ def _load(a):
             except OSError as exc:
                 raise gitio.GitError(f"cannot read {a.diff}: {exc.strerror}")
         if not a.checklist_ref:
-            try:
-                with open(a.file, encoding="utf-8") as fh:
-                    return diff_text, fh.read(), a.file, notes, acks
-            except OSError as exc:
-                raise gitio.GitError(f"cannot read {a.file}: {exc.strerror}")
+            return diff_text, _read(a.file), a.file, notes, acks
         top = gitio.toplevel()
         ref = a.checklist_ref
     else:
         top = gitio.toplevel()
-        if not a.base and not gitio.has_commits(top):
+        unborn = not a.base and not gitio.has_commits(top)
+        if unborn and a.checklist_from != "worktree":
             raise NothingToCheck("no commits yet, so there is no checklist to read; skipping")
         if a.staged:
             diff_text = gitio.git(gitio.DIFF_ARGS + ["--cached"], top)
@@ -105,17 +113,13 @@ def _load(a):
             ref = a.base
             acks += gitio.acks_in_range(a.base, head, top)
         else:
-            diff_text = gitio.git(gitio.DIFF_ARGS + ["HEAD"], top)
+            diff_text = gitio.git(gitio.DIFF_ARGS + [gitio.EMPTY_TREE if unborn else "HEAD"], top)
             ref = "HEAD"
         ref = a.checklist_ref or ref
 
     rel = gitio.rel_to_top(a.file, top)
     if a.checklist_from == "worktree":
-        try:
-            with open(os.path.join(top, rel), encoding="utf-8") as fh:
-                text = fh.read()
-        except OSError as exc:
-            raise gitio.GitError(f"cannot read {rel}: {exc.strerror}")
+        text = _read(os.path.join(top, rel))
         source = f"{rel} (working tree)"
     else:
         text = gitio.show(ref, rel, top)
