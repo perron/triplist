@@ -1,0 +1,26 @@
+diff --git a/src/session/types.ts b/src/session/types.ts
+index 1111111..2222222 100644
+--- a/src/session/types.ts
++++ b/src/session/types.ts
+@@ -4,0 +5 @@ export interface SavedSession {
++  workspaceId: string;
+diff --git a/src/server/config.ts b/src/server/config.ts
+index 3333333..4444444 100644
+--- a/src/server/config.ts
++++ b/src/server/config.ts
+@@ -10,0 +11,2 @@ export const config = {
++  region: process.env.APP_REGION,
++  retries: 3,
+diff --git a/src/server/config.test.ts b/src/server/config.test.ts
+index 5555555..6666666 100644
+--- a/src/server/config.test.ts
++++ b/src/server/config.test.ts
+@@ -2,0 +3 @@ import { config } from "./config";
++process.env.APP_REGION = "test";
+diff --git a/README.md b/README.md
+index 7777777..8888888 100644
+--- a/README.md
++++ b/README.md
+@@ -20 +20 @@ Run the server with:
+-npm start
++npm run start

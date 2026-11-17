@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "triplist"
+version = "0.1.0"
+description = "A reliability checklist that triggers on the diff: print only the checks a change needs."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+triplist = "triplist.cli:main"
+
+[tool.setuptools]
+packages = ["triplist"]
