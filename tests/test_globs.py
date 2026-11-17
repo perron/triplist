@@ -22,3 +22,25 @@ from triplist.globs import match
 ])
 def test_match(pat, path, ok):
     assert match(pat, path) is ok
+
+
+def test_plain_folder_path_matches_contents():
+    assert match("src/session", "src/session/a.ts")
+    assert match("src/session", "src/session")
+    assert not match("src/session", "src/sessions/a.ts")
+    assert match("./src/session", "src/session/a.ts")
+
+
+def test_braces():
+    assert match("src/**/*.{ts,tsx}", "src/a/b.tsx")
+    assert match("src/**/*.{ts,tsx}", "src/b.ts")
+    assert not match("src/**/*.{ts,tsx}", "src/b.js")
+    assert match("{app,lib}/*.py", "lib/x.py")
+
+
+def test_validate():
+    from triplist.globs import validate
+    assert validate("src/**") is None
+    assert validate("src/[z-a].ts")
+    assert validate("src/{a,b")
+    assert validate("a}")

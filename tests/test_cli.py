@@ -135,3 +135,56 @@ def test_readme_demo_output_matches():
     ).stdout
     readme = (ROOT / "README.md").read_text()
     assert out.strip() in readme
+
+
+def test_checklist_ref_protects_staged_hook(repo, capsys):
+    # The branch guts its own checklist in one commit...
+    (repo / "TRIPLIST.md").write_text("## noop\npaths: nothing/**\ncheck: c\n")
+    commit(repo, "simplify checklist")
+    (repo / "src/session/s.py").write_text("a = 8\n")
+    git(repo, "add", "-A")
+    # ...so HEAD no longer has the session item,
+    assert main(["check", "--staged", "--enforce"]) == 0
+    # but reading from main still catches it.
+    assert main(["check", "--staged", "--enforce", "--checklist-ref", "main"]) == 1
+    assert "checklist: TRIPLIST.md at main" in capsys.readouterr().out
+
+
+def test_diff_file_with_checklist_ref(repo, capsys):
+    (repo / "TRIPLIST.md").write_text("## noop\npaths: nothing/**\ncheck: c\n")
+    commit(repo, "simplify checklist")
+    (repo / "src/session/s.py").write_text("a = 9\n")
+    commit(repo, "touch")
+    diff = subprocess.run(["git", "diff", "main...HEAD"], cwd=repo, capture_output=True, text=True).stdout
+    (repo / "pr.diff").write_text(diff)
+    assert main(["check", "--diff", "pr.diff", "--checklist-ref", "main"]) == 0
+    out = capsys.readouterr().out
+    assert "[session]" in out and "note: This change edits TRIPLIST.md" in out
+
+
+def test_unborn_head_is_skipped(tmp_path, monkeypatch, capsys):
+    git(tmp_path, "init", "-q")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "TRIPLIST.md").write_text(CHECKLIST)
+    git(tmp_path, "add", "-A")
+    assert main(["check", "--staged", "--enforce"]) == 0
+    assert "no commits yet" in capsys.readouterr().out
+
+
+def test_respects_odd_user_diff_config(repo, capsys):
+    git(repo, "config", "diff.mnemonicPrefix", "true")
+    git(repo, "config", "diff.noprefix", "true")
+    (repo / "src/session/s.py").write_text("a = 10\n")
+    os.chmod(repo / "app.py", 0o755)
+    assert main(["check", "--format", "json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["files_changed"] == 2
+    assert [t["id"] for t in data["triggered"]] == ["session"]
+
+
+def test_more_files_line(repo, capsys):
+    for i in range(5):
+        (repo / f"src/session/n{i}.py").write_text("x\n")
+    git(repo, "add", "-A")
+    assert main(["check", "--staged"]) == 0
+    assert "...and 2 more files" in capsys.readouterr().out

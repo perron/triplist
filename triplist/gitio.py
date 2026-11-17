@@ -7,7 +7,10 @@ import re
 import subprocess
 from typing import List, Optional
 
-DIFF_ARGS = ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "-M", "-U0"]
+DIFF_ARGS = [
+    "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--no-relative",
+    "--src-prefix=a/", "--dst-prefix=b/", "-M", "-U0",
+]
 TRAILER = re.compile(r"^\s*Checked:\s*([A-Za-z0-9][A-Za-z0-9._-]*)", re.M | re.I)
 
 
@@ -52,3 +55,11 @@ def acks_in_text(text: str) -> List[str]:
 def acks_in_range(base: str, head: str, cwd: Optional[str] = None) -> List[str]:
     log = git(["log", "--format=%B%x00", f"{base}..{head}"], cwd)
     return acks_in_text(log)
+
+
+def has_commits(cwd: Optional[str] = None) -> bool:
+    try:
+        git(["rev-parse", "--verify", "--quiet", "HEAD"], cwd)
+        return True
+    except GitError:
+        return False

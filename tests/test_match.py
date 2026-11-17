@@ -45,7 +45,15 @@ def test_rename_matches_old_path_and_removed_uses_old_name():
     assert hits[0].evidence == ["src/session/t.ts:7 removed line matches `legacy`"]
 
 
-def test_evidence_is_capped():
+def test_evidence_is_capped_but_counted():
     its = items("## any\npaths: **\ncheck: c\n")
     hits = run(its, [FileChange(f"f{i}") for i in range(10)])
-    assert len(hits[0].evidence) == 3
+    assert len(hits[0].evidence) == 3 and hits[0].files == 10
+
+
+def test_exclude_uses_new_path_on_rename():
+    its = items("## env\nadded: process\\.env\nexclude: **/*.test.ts\ncheck: c\n")
+    fc = FileChange("src/a.ts", old_path="src/a.test.ts", status="renamed", added=[(2, "process.env.X")])
+    assert ids(run(its, [fc])) == ["env"]
+    fc2 = FileChange("src/a.test.ts", old_path="src/a.ts", status="renamed", added=[(2, "process.env.X")])
+    assert ids(run(its, [fc2])) == []

@@ -31,6 +31,10 @@ why: Replace with the incident or PR that taught you this.
 """
 
 
+def _n(count: int, word: str) -> str:
+    return f"{count} {word}" + ("" if count == 1 else "s")
+
+
 def _err(msg: str) -> None:
     print(f"triplist: {msg}", file=sys.stderr)
 
@@ -80,24 +84,30 @@ def _load(a):
                     diff_text = fh.read()
             except OSError as exc:
                 raise gitio.GitError(f"cannot read {a.diff}: {exc.strerror}")
-        try:
-            with open(a.file, encoding="utf-8") as fh:
-                return diff_text, fh.read(), a.file, notes, acks
-        except OSError as exc:
-            raise gitio.GitError(f"cannot read {a.file}: {exc.strerror}")
-
-    top = gitio.toplevel()
-    if a.staged:
-        diff_text = gitio.git(gitio.DIFF_ARGS + ["--cached"], top)
-        ref = "HEAD"
-    elif a.base:
-        head = a.head or "HEAD"
-        diff_text = gitio.git(gitio.DIFF_ARGS + [f"{a.base}...{head}"], top)
-        ref = a.base
-        acks += gitio.acks_in_range(a.base, head, top)
+        if not a.checklist_ref:
+            try:
+                with open(a.file, encoding="utf-8") as fh:
+                    return diff_text, fh.read(), a.file, notes, acks
+            except OSError as exc:
+                raise gitio.GitError(f"cannot read {a.file}: {exc.strerror}")
+        top = gitio.toplevel()
+        ref = a.checklist_ref
     else:
-        diff_text = gitio.git(gitio.DIFF_ARGS + ["HEAD"], top)
-        ref = "HEAD"
+        top = gitio.toplevel()
+        if not a.base and not gitio.has_commits(top):
+            raise NothingToCheck("no commits yet, so there is no checklist to read; skipping")
+        if a.staged:
+            diff_text = gitio.git(gitio.DIFF_ARGS + ["--cached"], top)
+            ref = "HEAD"
+        elif a.base:
+            head = a.head or "HEAD"
+            diff_text = gitio.git(gitio.DIFF_ARGS + [f"{a.base}...{head}"], top)
+            ref = a.base
+            acks += gitio.acks_in_range(a.base, head, top)
+        else:
+            diff_text = gitio.git(gitio.DIFF_ARGS + ["HEAD"], top)
+            ref = "HEAD"
+        ref = a.checklist_ref or ref
 
     rel = gitio.rel_to_top(a.file, top)
     if a.checklist_from == "worktree":
@@ -124,9 +134,16 @@ def _load(a):
     return diff_text, text, source, notes, acks
 
 
+class NothingToCheck(Exception):
+    pass
+
+
 def cmd_check(a) -> int:
     try:
         diff_text, text, source, notes, acks = _load(a)
+    except NothingToCheck as exc:
+        print(f"triplist: {exc}")
+        return 0
     except gitio.GitError as exc:
         _err(str(exc))
         return 2
@@ -150,7 +167,8 @@ def cmd_check(a) -> int:
             "notes": notes,
             "triggered": [
                 {"id": h.item.id, "check": h.item.check, "why": h.item.why,
-                 "evidence": h.evidence, "acknowledged": h not in missing}
+                 "evidence": h.evidence, "files": h.files,
+                 "acknowledged": h not in missing}
                 for h in hits
             ],
         }, indent=2))
@@ -167,9 +185,11 @@ def cmd_check(a) -> int:
                 print(f"  - Why: {h.item.why}")
             for e in h.evidence:
                 print(f"  - Trigger: {e}")
+            if h.files > len(h.evidence):
+                print(f"  - ...and {_n(h.files - len(h.evidence), 'more file')}")
     else:
-        print(f"triplist: {len(hits)} of {len(items)} checks triggered by "
-              f"{len(changes)} changed files (checklist: {source})")
+        print(f"triplist: {len(hits)} of {_n(len(items), 'check')} triggered by "
+              f"{_n(len(changes), 'changed file')} (checklist: {source})")
         for n in notes:
             print(f"note: {n}")
         for h in hits:
@@ -179,10 +199,12 @@ def cmd_check(a) -> int:
                 print(f"    why: {h.item.why}")
             for e in h.evidence:
                 print(f"    trigger: {e}")
+            if h.files > len(h.evidence):
+                print(f"    ...and {_n(h.files - len(h.evidence), 'more file')}")
 
     if a.enforce and missing:
         ids = ", ".join(h.item.id for h in missing)
-        _err(f"{len(missing)} triggered checks not acknowledged: {ids}")
+        _err(f"{_n(len(missing), 'triggered check')} not acknowledged: {ids}")
         _err("add a 'Checked: <id>' line to the commit message for each one you have answered")
         return 1
     return 0
@@ -205,9 +227,11 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--file", default=DEFAULT_FILE, help=f"checklist path (default {DEFAULT_FILE})")
     c.add_argument("--checklist-from", choices=["base", "worktree"], default="base",
                    help="read the checklist from the base ref (default) or the working tree")
+    c.add_argument("--checklist-ref", metavar="REF",
+                   help="read the checklist from REF instead (for example origin/main); works with --diff too")
     c.add_argument("--format", choices=["text", "markdown", "json"], default="text")
     c.add_argument("--enforce", action="store_true",
-                   help="exit 1 if a triggered item has no 'Checked: <id>' acknowledgement")
+                   help="exit 1 if a triggered item has no 'Checked: <id>' acknowledgement line")
     c.add_argument("--ack", action="append", metavar="ID", help="treat ID as acknowledged (repeatable)")
     c.add_argument("--message-file", metavar="FILE", help="also read 'Checked: <id>' lines from FILE (for a commit-msg hook)")
     c.set_defaults(func=cmd_check)

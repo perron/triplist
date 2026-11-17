@@ -56,7 +56,18 @@ check: f
     assert any("[no-trigger]" in m and "no trigger" in m for m in msgs)
     assert any("[bad-re]" in m and "bad regex" in m for m in msgs)
     assert any("[has space]" in m and "item id" in m for m in msgs)
-    assert any(m.startswith("warning") and "pahts" in m for m in msgs)
+    assert any(m.startswith("error") and "did you mean 'paths'" in m for m in msgs)
+
+
+def test_notes_with_colons_are_ignored_but_typos_are_errors():
+    items, problems = parse("## a\npaths: x\ncheck: c\nNote: see the runbook\nexcludes: tests/**\n")
+    assert len(problems) == 1 and "did you mean 'exclude'" in str(problems[0])
+
+
+def test_brace_globs_and_bad_globs():
+    items, problems = parse("## a\npaths: src/**/*.{ts,tsx}, docs/**\ncheck: c\n## b\npaths: src/[z-a].ts\ncheck: c\n")
+    assert items[0].paths == ["src/**/*.{ts,tsx}", "docs/**"]
+    assert any("[b]" in str(p) and "bad glob" in str(p) for p in problems)
 
 
 def test_fenced_code_is_ignored_and_other_heading_ends_item():

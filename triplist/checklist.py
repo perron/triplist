@@ -11,14 +11,19 @@ Each item is a '## <id>' heading followed by 'key: value' lines:
 Keys: paths, exclude (comma-separated globs), added, removed, changed (one
 regex per line; several lines of the same key mean "any of"), check
 (required), why (optional). A line may start with '- '. Other text is
-treated as notes and ignored. Repeated check or why lines are joined.
+treated as notes and ignored, except a key that looks like a typo of a
+known key (for example 'excludes:'), which is an error. Repeated check or
+why lines are joined. Any other '#' heading ends the current item.
 """
 
 from __future__ import annotations
 
+import difflib
 import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
+
+from . import globs
 
 KEYS = ("paths", "exclude", "added", "removed", "changed", "check", "why")
 _KEY_LINE = re.compile(r"^(?:[-*]\s+)?([A-Za-z_]+)\s*:\s?(.*)$")
@@ -57,7 +62,20 @@ class Problem:
 
 
 def _split_globs(value: str) -> List[str]:
-    return [g.strip().strip("`") for g in value.split(",") if g.strip().strip("`")]
+    """Split on commas that are not inside {braces}."""
+    parts, depth, cur = [], 0, ""
+    for c in value:
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth = max(0, depth - 1)
+        if c == "," and depth == 0:
+            parts.append(cur)
+            cur = ""
+        else:
+            cur += c
+    parts.append(cur)
+    return [g.strip().strip("`") for g in parts if g.strip().strip("`")]
 
 
 def _unquote(value: str) -> str:
@@ -97,13 +115,20 @@ def parse(text: str) -> Tuple[List[Item], List[Problem]]:
             continue
         key, value = m.group(1).lower(), m.group(2).strip()
         if key not in KEYS:
-            problems.append(Problem(n, cur.id, f"unknown key '{m.group(1)}' (known: {', '.join(KEYS)})", "warning"))
-            continue
+            close = difflib.get_close_matches(key, KEYS, n=1, cutoff=0.6)
+            if close:
+                problems.append(Problem(n, cur.id, f"unknown key '{m.group(1)}' (did you mean '{close[0]}'?)"))
+            continue  # anything else is a note
         if not value:
             problems.append(Problem(n, cur.id, f"'{key}' has no value"))
             continue
         if key in ("paths", "exclude"):
-            getattr(cur, key).extend(_split_globs(value))
+            for g in _split_globs(value):
+                bad = globs.validate(g)
+                if bad:
+                    problems.append(Problem(n, cur.id, f"bad glob '{g}' in '{key}': {bad}"))
+                else:
+                    getattr(cur, key).append(g)
         elif key in ("added", "removed", "changed"):
             pat = _unquote(value)
             try:

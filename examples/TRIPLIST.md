@@ -32,5 +32,5 @@ why: Demo incident INC-3
 
 ## billing
 paths: src/billing/**
-check: Did billing owners review this change?
-why: Demo policy
+check: Does this change round money the same way in every place it is shown?
+why: Demo incident INC-9
